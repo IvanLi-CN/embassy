@@ -151,6 +151,13 @@ pub struct OpAmpInternalOutput<'d, T: Instance> {
     _inner: &'d OpAmp<'d, T>,
 }
 
+/// OpAmp inputs, connected to a GPIO pad.
+///
+/// This struct can also be used as a DAC output.
+pub struct OpAmpInput<'d, T: Instance> {
+    _inner: &'d OpAmp<'d, T>,
+}
+
 /// OpAmp driver.
 pub struct OpAmp<'d, T: Instance> {
     _inner: PeripheralRef<'d, T>,
@@ -285,6 +292,44 @@ impl<'d, T: Instance> OpAmp<'d, T> {
         OpAmpOutput { _inner: self }
     }
 
+    /// Configure the OpAmp as a PGA for the DAC it is connected to,
+    /// outputting to the provided output pin, and enable the opamp.
+    /// 
+    /// 
+    ///
+    /// The output pin is held within the returned [`OpAmpOutput`] struct,
+    /// preventing it being used elsewhere. The `OpAmpOutput` can then be
+    /// directly used as an ADC input. The opamp will be disabled when the
+    /// [`OpAmpOutput`] is dropped.
+    #[cfg(opamp_g4)]
+    pub fn pga_dac_ext(
+        &mut self,
+        in0_pin: impl Peripheral<P = impl InvertingPin<T> + crate::gpio::Pin>,
+        in1_pin: Option<impl Peripheral<P = impl InvertingPin<T> + crate::gpio::Pin>>,
+        out_pin: impl Peripheral<P = impl OutputPin<T> + crate::gpio::Pin>,
+        gain: OpAmpGain,
+    ) -> OpAmpOutput<'_, T> {
+        into_ref!(in0_pin);
+        in0_pin.set_as_analog();
+        if let Some(in1_pin) = in1_pin {
+            into_ref!(in1_pin);
+            in1_pin.set_as_analog();
+        }
+        into_ref!(out_pin);
+        out_pin.set_as_analog();
+
+        T::regs().csr().modify(|w| {
+            use crate::pac::opamp::vals::*;
+
+            w.set_pga_gain(PgaGain::from_bits(gain.into()));
+            w.set_vm_sel(VmSel::VINM0);
+            w.set_vp_sel(VpSel::DAC3_CH1); // DAC3_CHx
+            w.set_opaintoen(Opaintoen::OUTPUT_PIN);
+            w.set_opampen(true);
+        });
+
+        OpAmpOutput { _inner: self }
+    }
     /// Configure the OpAmp as a buffer for the provided input pin,
     /// with the output only used internally, and enable the opamp.
     ///
