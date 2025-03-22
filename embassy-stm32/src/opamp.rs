@@ -6,6 +6,14 @@ use embassy_hal_internal::{into_ref, PeripheralRef};
 use crate::pac::opamp::vals::*;
 use crate::Peripheral;
 
+/// Performs a busy-wait delay for a specified number of microseconds.
+fn blocking_delay_ms(ms: u32) {
+    #[cfg(feature = "time")]
+    embassy_time::block_for(embassy_time::Duration::from_millis(ms as u64));
+    #[cfg(not(feature = "time"))]
+    cortex_m::asm::delay(unsafe { crate::rcc::get_freqs() }.sys.to_hertz().unwrap().0 / 1_000 * ms);
+}
+
 /// Gain
 #[allow(missing_docs)]
 #[derive(Clone, Copy)]
@@ -76,6 +84,11 @@ pub enum OpAmpGain {
     Inv31OrMul32Vinm0Vinm1,
     /// Inverting gain = -63 / Non-inverting gain = 64 with VINM0 pin for input or bias, VINM1 pin for filtering
     Inv63OrMul64Vinm0Vinm1,
+}
+
+enum OpAmpDifferentialPair {
+    P,
+    N,
 }
 
 #[cfg(opamp_g4)]
@@ -365,7 +378,106 @@ impl<'d, T: Instance> OpAmp<'d, T> {
             w.set_opampen(true);
         });
 
+        defmt::info!(
+            "differential pair calibration. n: {}, p: {}",
+            T::regs().csr().read().trimoffsetn(),
+            T::regs().csr().read().trimoffsetp()
+        );
+
         OpAmpStandaloneOutput { _inner: self }
+    }
+
+    /// Calibrates the operational amplifier.
+    ///
+    /// This function enables the opamp and sets the user trim mode for calibration.
+    /// Depending on the speed mode of the opamp, it calibrates the differential pair inputs.
+    /// For normal speed, both the P and N differential pairs are calibrated,
+    /// while for high-speed mode, only the P differential pair is calibrated.
+    ///
+    /// Calibrating a differential pair requires waiting 12ms in the worst case (binary method).
+
+    #[cfg(opamp_g4)]
+    pub fn calibrate(&mut self) {
+        T::regs().csr().modify(|w| {
+            w.set_opampen(true);
+            w.set_calon(true);
+            w.set_usertrim(Usertrim::USER);
+        });
+
+        match T::regs().csr().read().opahsm() {
+            Opahsm::NORMAL => {
+                self.calibrate_differential_pair(OpAmpDifferentialPair::P);
+                self.calibrate_differential_pair(OpAmpDifferentialPair::N);
+            }
+            Opahsm::HIGH_SPEED => {
+                self.calibrate_differential_pair(OpAmpDifferentialPair::P);
+            }
+        }
+
+        defmt::info!(
+            "calibration. n: {}, p: {}",
+            T::regs().csr().read().trimoffsetn(),
+            T::regs().csr().read().trimoffsetp()
+        );
+
+        T::regs().csr().modify(|w| {
+            w.set_calon(false);
+            w.set_opampen(false);
+        });
+    }
+
+    /// Calibrate differential pair.
+    ///
+    /// The calibration is done by trying different offset values and
+    /// measuring the outcal bit.
+    ///
+    /// The calibration range is from 0 to 31.
+    ///
+    /// The result is stored in the OPAMP_CSR register.
+    #[cfg(opamp_g4)]
+    fn calibrate_differential_pair(&mut self, pair: OpAmpDifferentialPair) {
+        let mut low = 0;
+        let mut high = 31;
+
+        let calsel = match pair {
+            OpAmpDifferentialPair::P => Calsel::PERCENT10,
+            OpAmpDifferentialPair::N => Calsel::PERCENT90,
+        };
+
+        T::regs().csr().modify(|w| {
+            w.set_calsel(calsel);
+        });
+
+        while low <= high {
+            let mid = (low + high) / 2;
+
+            T::regs().csr().modify(|w| match pair {
+                OpAmpDifferentialPair::P => {
+                    defmt::info!("p calibration. offset: {}", mid);
+                    w.set_trimoffsetp(mid);
+                }
+                OpAmpDifferentialPair::N => {
+                    defmt::info!("n calibration. offset: {}", mid);
+                    w.set_trimoffsetn(mid);
+                }
+            });
+
+            // The closer the trimming value is to the optimum trimming value, the longer it takes to stabilize
+            // (with a maximum stabilization time remaining below 2 ms in any case) -- RM0440 25.3.7
+            blocking_delay_ms(2);
+
+            if T::regs().csr().read().outcal() == Outcal::LOW {
+                if mid == 0 {
+                    break;
+                }
+                high = mid - 1;
+            } else {
+                if mid == 31 {
+                    break;
+                }
+                low = mid + 1;
+            }
+        }
     }
 }
 
@@ -394,6 +506,7 @@ impl<'d, T: Instance> Drop for OpAmpStandaloneOutput<'d, T> {
         });
     }
 }
+
 pub(crate) trait SealedInstance {
     fn regs() -> crate::pac::opamp::Opamp;
 }
