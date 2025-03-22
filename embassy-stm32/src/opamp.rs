@@ -151,6 +151,14 @@ pub struct OpAmpInternalOutput<'d, T: Instance> {
     _inner: &'d OpAmp<'d, T>,
 }
 
+/// OpAmp standalone outputs, wired directly to ADC inputs.
+///
+/// This struct can be used as an ADC input.
+#[cfg(opamp_g4)]
+pub struct OpAmpStandaloneOutput<'d, T: Instance> {
+    _inner: &'d OpAmp<'d, T>,
+}
+
 /// OpAmp driver.
 pub struct OpAmp<'d, T: Instance> {
     _inner: PeripheralRef<'d, T>,
@@ -320,6 +328,45 @@ impl<'d, T: Instance> OpAmp<'d, T> {
 
         OpAmpInternalOutput { _inner: self }
     }
+
+    /// Configure the OpAmp as a standalone DAC with the inverting input
+    /// connected to the provided pin, and the output connected to the
+    /// provided pin (or internally used as an ADC input if `None`).
+    ///
+    /// The returned `OpAmpStandaloneOutput` struct may be used as an ADC
+    /// input. The opamp output will be disabled when it is dropped.
+    ///
+    /// The input pin is configured for analogue mode but not consumed,
+    /// so it may be subsequently used for ADC or comparator inputs.
+    #[cfg(opamp_g4)]
+    pub fn standalone_dac(
+        &mut self,
+        m_pin: impl Peripheral<P = impl InvertingPin<T> + crate::gpio::Pin>,
+        out_pin: Option<impl Peripheral<P = impl OutputPin<T> + crate::gpio::Pin>>,
+    ) -> OpAmpStandaloneOutput<'_, T> {
+        into_ref!(m_pin);
+        m_pin.set_as_analog();
+
+        let opaintoen = match out_pin {
+            Some(out_pin) => {
+                into_ref!(out_pin);
+                out_pin.set_as_analog();
+
+                Opaintoen::OUTPUT_PIN
+            }
+            None => Opaintoen::ADCCHANNEL,
+        };
+
+        T::regs().csr().modify(|w| {
+            use crate::pac::opamp::vals::*;
+            w.set_vp_sel(VpSel::DAC3_CH1); // Actually DAC3_CHx
+            w.set_vm_sel(VmSel::from_bits(m_pin.channel()));
+            w.set_opaintoen(opaintoen);
+            w.set_opampen(true);
+        });
+
+        OpAmpStandaloneOutput { _inner: self }
+    }
 }
 
 impl<'d, T: Instance> Drop for OpAmpOutput<'d, T> {
@@ -339,6 +386,14 @@ impl<'d, T: Instance> Drop for OpAmpInternalOutput<'d, T> {
     }
 }
 
+#[cfg(opamp_g4)]
+impl<'d, T: Instance> Drop for OpAmpStandaloneOutput<'d, T> {
+    fn drop(&mut self) {
+        T::regs().csr().modify(|w| {
+            w.set_opampen(false);
+        });
+    }
+}
 pub(crate) trait SealedInstance {
     fn regs() -> crate::pac::opamp::Opamp;
 }
