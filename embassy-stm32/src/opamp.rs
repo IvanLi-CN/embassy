@@ -9,12 +9,113 @@ use crate::Peripheral;
 /// Gain
 #[allow(missing_docs)]
 #[derive(Clone, Copy)]
+#[cfg(not(opamp_g4))]
 pub enum OpAmpGain {
     Mul1,
     Mul2,
     Mul4,
     Mul8,
     Mul16,
+}
+
+/// Represents the programmable gain settings for an operational amplifier.
+///
+/// This enum defines various gain configurations that can be set for an operational amplifier
+/// in an STM32G4 microcontroller. Each variant corresponds to a specific gain setting,
+/// which can be either non-inverting or inverting, and may include additional features such as
+/// filtering or specific pin usage for input or biasing.
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg(opamp_g4)]
+pub enum OpAmpGain {
+    /// Non-inverting internal gain = 2
+    Mul2,
+    /// Non-inverting internal gain = 4
+    Mul4,
+    /// Non-inverting internal gain = 8
+    Mul8,
+    /// Non-inverting internal gain = 16
+    Mul16,
+    /// Non-inverting internal gain = 32
+    Mul32,
+    /// Non-inverting internal gain = 64
+    Mul64,
+    /// Inverting gain = -1 / Non-inverting gain = 2 with VINM0 pin for input or bias
+    Inv1OrMul2Vinm0,
+    /// Inverting gain = -3 / Non-inverting gain = 4 with VINM0 pin for input or bias
+    Inv3OrMul4Vinm0,
+    /// Inverting gain = -7 / Non-inverting gain = 8 with VINM0 pin for input or bias
+    Inv7OrMul8Vinm0,
+    /// Inverting gain = -15 / Non-inverting gain = 16 with VINM0 pin for input or bias
+    Inv15OrMul16Vinm0,
+    /// Inverting gain = -31 / Non-inverting gain = 32 with VINM0 pin for input or bias
+    Inv31OrMul32Vinm0,
+    /// Inverting gain = -63 / Non-inverting gain = 64 with VINM0 pin for input or bias
+    Inv63OrMul64Vinm0,
+    /// Non-inverting gain = 2 with filtering on VINM0 pin
+    Mul2FilterVinm0,
+    /// Non-inverting gain = 4 with filtering on VINM0 pin
+    Mul4FilterVinm0,
+    /// Non-inverting gain = 8 with filtering on VINM0 pin
+    Mul8FilterVinm0,
+    /// Non-inverting gain = 16 with filtering on VINM0 pin
+    Mul16FilterVinm0,
+    /// Non-inverting gain = 32 with filtering on VINM0 pin
+    Mul32FilterVinm0,
+    /// Non-inverting gain = 64 with filtering on VINM0 pin
+    Mul64FilterVinm0,
+    /// Inverting gain = -1 / Non-inverting gain = 2 with VINM0 pin for input or bias, VINM1 pin for filtering
+    Inv1OrMul2Vinm0Vinm1,
+    /// Inverting gain = -3 / Non-inverting gain = 4 with VINM0 pin for input or bias, VINM1 pin for filtering
+    Inv3OrMul4Vinm0Vinm1,
+    /// Inverting gain = -7 / Non-inverting gain = 8 with VINM0 pin for input or bias, VINM1 pin for filtering
+    Inv7OrMul8Vinm0Vinm1,
+    /// Inverting gain = -15 / Non-inverting gain = 16 with VINM0 pin for input or bias, VINM1 pin for filtering
+    Inv15OrMul16Vinm0Vinm1,
+    /// Inverting gain = -31 / Non-inverting gain = 32 with VINM0 pin for input or bias, VINM1 pin for filtering
+    Inv31OrMul32Vinm0Vinm1,
+    /// Inverting gain = -63 / Non-inverting gain = 64 with VINM0 pin for input or bias, VINM1 pin for filtering
+    Inv63OrMul64Vinm0Vinm1,
+}
+
+#[cfg(opamp_g4)]
+impl Into<u8> for OpAmpGain {
+    fn into(self) -> u8 {
+        match self {
+            OpAmpGain::Mul2 => 0b00000,
+            OpAmpGain::Mul4 => 0b00001,
+            OpAmpGain::Mul8 => 0b00010,
+            OpAmpGain::Mul16 => 0b00011,
+            OpAmpGain::Mul32 => 0b00100,
+            OpAmpGain::Mul64 => 0b00101,
+            // 00110: Not used
+            // 00111: Not used
+            OpAmpGain::Inv1OrMul2Vinm0 => 0b01000,
+            OpAmpGain::Inv3OrMul4Vinm0 => 0b01001,
+            OpAmpGain::Inv7OrMul8Vinm0 => 0b01010,
+            OpAmpGain::Inv15OrMul16Vinm0 => 0b01011,
+            OpAmpGain::Inv31OrMul32Vinm0 => 0b01100,
+            OpAmpGain::Inv63OrMul64Vinm0 => 0b01101,
+            // 01110: Not used
+            // 01111: Not used
+            OpAmpGain::Mul2FilterVinm0 => 0b10000,
+            OpAmpGain::Mul4FilterVinm0 => 0b10001,
+            OpAmpGain::Mul8FilterVinm0 => 0b10010,
+            OpAmpGain::Mul16FilterVinm0 => 0b10011,
+            OpAmpGain::Mul32FilterVinm0 => 0b10100,
+            OpAmpGain::Mul64FilterVinm0 => 0b10101,
+            // 10110: Not used
+            // 10111: Not used
+            OpAmpGain::Inv1OrMul2Vinm0Vinm1 => 0b11000,
+            OpAmpGain::Inv3OrMul4Vinm0Vinm1 => 0b11001,
+            OpAmpGain::Inv7OrMul8Vinm0Vinm1 => 0b11010,
+            OpAmpGain::Inv15OrMul16Vinm0Vinm1 => 0b11011,
+            OpAmpGain::Inv31OrMul32Vinm0Vinm1 => 0b11100,
+            OpAmpGain::Inv63OrMul64Vinm0Vinm1 => 0b11101,
+            // 11110: Not used
+            // 11111: Not used
+        }
+    }
 }
 
 /// Speed
@@ -80,6 +181,7 @@ impl<'d, T: Instance> OpAmp<'d, T> {
     /// preventing it being used elsewhere. The `OpAmpOutput` can then be
     /// directly used as an ADC input. The opamp will be disabled when the
     /// [`OpAmpOutput`] is dropped.
+    #[cfg(not(opamp_g4))]
     pub fn buffer_ext(
         &mut self,
         in_pin: impl Peripheral<P = impl NonInvertingPin<T> + crate::gpio::Pin>,
@@ -111,6 +213,49 @@ impl<'d, T: Instance> OpAmp<'d, T> {
 
         OpAmpOutput { _inner: self }
     }
+
+    /// Configure the OpAmp as a buffer for the provided input pin,
+    /// outputting to the provided output pin, and enable the opamp.
+    ///
+    /// If `gain` is `None`, the gain is set to 1.
+    ///
+    /// The input pin is configured for analogue mode but not consumed,
+    /// so it may subsequently be used for ADC or comparator inputs.
+    ///
+    /// The output pin is held within the returned [`OpAmpOutput`] struct,
+    /// preventing it being used elsewhere. The `OpAmpOutput` can then be
+    /// directly used as an ADC input. The opamp will be disabled when the
+    /// [`OpAmpOutput`] is dropped.
+    #[cfg(opamp_g4)]
+    pub fn buffer_ext(
+        &mut self,
+        in_pin: impl Peripheral<P = impl NonInvertingPin<T> + crate::gpio::Pin>,
+        out_pin: impl Peripheral<P = impl OutputPin<T> + crate::gpio::Pin>,
+        gain: Option<OpAmpGain>,
+    ) -> OpAmpOutput<'_, T> {
+        into_ref!(in_pin);
+        into_ref!(out_pin);
+        in_pin.set_as_analog();
+        out_pin.set_as_analog();
+
+        let vm_sel = match gain {
+            None => VmSel::OUTPUT,
+            Some(_) => VmSel::PGA,
+        };
+
+        T::regs().csr().modify(|w| {
+            w.set_vp_sel(VpSel::from_bits(in_pin.channel()));
+            w.set_vm_sel(vm_sel);
+            if let Some(gain) = gain {
+                w.set_pga_gain(PgaGain::from_bits(gain.into()));
+            }
+            w.set_opaintoen(Opaintoen::OUTPUT_PIN);
+            w.set_opampen(true);
+        });
+
+        OpAmpOutput { _inner: self }
+    }
+
     /// Configure the OpAmp as a buffer for the DAC it is connected to,
     /// outputting to the provided output pin, and enable the opamp.
     ///
@@ -141,6 +286,8 @@ impl<'d, T: Instance> OpAmp<'d, T> {
     /// Configure the OpAmp as a buffer for the provided input pin,
     /// with the output only used internally, and enable the opamp.
     ///
+    /// If `gain` is `None`, the gain is set to 1.
+    ///
     /// The input pin is configured for analogue mode but not consumed,
     /// so it may be subsequently used for ADC or comparator inputs.
     ///
@@ -150,25 +297,23 @@ impl<'d, T: Instance> OpAmp<'d, T> {
     pub fn buffer_int(
         &mut self,
         pin: impl Peripheral<P = impl NonInvertingPin<T> + crate::gpio::Pin>,
-        gain: OpAmpGain,
+        gain: Option<OpAmpGain>,
     ) -> OpAmpInternalOutput<'_, T> {
         into_ref!(pin);
         pin.set_as_analog();
 
-        // PGA_GAIN value may have different meaning in different MCU serials, use with caution.
-        let (vm_sel, pga_gain) = match gain {
-            OpAmpGain::Mul1 => (0b11, 0b00),
-            OpAmpGain::Mul2 => (0b10, 0b00),
-            OpAmpGain::Mul4 => (0b10, 0b01),
-            OpAmpGain::Mul8 => (0b10, 0b10),
-            OpAmpGain::Mul16 => (0b10, 0b11),
+        let vm_sel = match gain {
+            None => VmSel::OUTPUT,
+            Some(_) => VmSel::PGA,
         };
 
         T::regs().csr().modify(|w| {
             use crate::pac::opamp::vals::*;
             w.set_vp_sel(VpSel::from_bits(pin.channel()));
-            w.set_vm_sel(VmSel::from_bits(vm_sel));
-            w.set_pga_gain(PgaGain::from_bits(pga_gain));
+            w.set_vm_sel(vm_sel);
+            if let Some(gain) = gain {
+                w.set_pga_gain(PgaGain::from_bits(gain.into()));
+            }
             w.set_opaintoen(Opaintoen::ADCCHANNEL);
             w.set_opampen(true);
         });
@@ -340,6 +485,18 @@ macro_rules! impl_opamp_vp_pin {
     ($inst:ident, $pin:ident, $ch:expr) => {
         impl crate::opamp::NonInvertingPin<peripherals::$inst> for crate::peripherals::$pin {}
         impl crate::opamp::SealedNonInvertingPin<peripherals::$inst> for crate::peripherals::$pin {
+            fn channel(&self) -> u8 {
+                $ch
+            }
+        }
+    };
+}
+
+#[allow(unused_macros)]
+macro_rules! impl_opamp_vn_pin {
+    ($inst:ident, $pin:ident, $ch:expr) => {
+        impl crate::opamp::InvertingPin<peripherals::$inst> for crate::peripherals::$pin {}
+        impl crate::opamp::SealedInvertingPin<peripherals::$inst> for crate::peripherals::$pin {
             fn channel(&self) -> u8 {
                 $ch
             }
