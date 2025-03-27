@@ -378,11 +378,51 @@ impl<'d, T: Instance> OpAmp<'d, T> {
             w.set_opampen(true);
         });
 
-        defmt::info!(
-            "differential pair calibration. n: {}, p: {}",
-            T::regs().csr().read().trimoffsetn(),
-            T::regs().csr().read().trimoffsetp()
-        );
+        OpAmpStandaloneOutput { _inner: self }
+    }
+
+    /// Configure the OpAmp in standalone mode with the non-inverting input
+    /// connected to the provided `p_pin`, the inverting input connected to
+    /// the `m_pin`, and optionally output to the provided `out_pin`.
+    ///
+    /// If `out_pin` is provided, the OpAmp output is routed to the GPIO pad,
+    /// otherwise, it is used internally as an ADC input.
+    ///
+    /// The input pins are configured for analogue mode but not consumed,
+    /// allowing their subsequent use for ADC or comparator inputs.
+    ///
+    /// The returned `OpAmpStandaloneOutput` struct may be used as an ADC
+    /// input. The opamp output will be disabled when it is dropped.
+    #[cfg(opamp_g4)]
+    pub fn standalone(
+        &mut self,
+        p_pin: impl Peripheral<P = impl NonInvertingPin<T> + crate::gpio::Pin>,
+        m_pin: impl Peripheral<P = impl InvertingPin<T> + crate::gpio::Pin>,
+        out_pin: Option<impl Peripheral<P = impl OutputPin<T> + crate::gpio::Pin>>,
+    ) -> OpAmpStandaloneOutput<'_, T> {
+        into_ref!(p_pin);
+        into_ref!(m_pin);
+
+        p_pin.set_as_analog();
+        m_pin.set_as_analog();
+
+        let opaintoen = match out_pin {
+            Some(out_pin) => {
+                into_ref!(out_pin);
+                out_pin.set_as_analog();
+
+                Opaintoen::OUTPUT_PIN
+            }
+            None => Opaintoen::ADCCHANNEL,
+        };
+
+        T::regs().csr().modify(|w| {
+            use crate::pac::opamp::vals::*;
+            w.set_vp_sel(VpSel::from_bits(p_pin.channel()));
+            w.set_vm_sel(VmSel::from_bits(m_pin.channel()));
+            w.set_opaintoen(opaintoen);
+            w.set_opampen(true);
+        });
 
         OpAmpStandaloneOutput { _inner: self }
     }
@@ -395,7 +435,6 @@ impl<'d, T: Instance> OpAmp<'d, T> {
     /// while for high-speed mode, only the P differential pair is calibrated.
     ///
     /// Calibrating a differential pair requires waiting 12ms in the worst case (binary method).
-
     #[cfg(opamp_g4)]
     pub fn calibrate(&mut self) {
         T::regs().csr().modify(|w| {
@@ -413,12 +452,6 @@ impl<'d, T: Instance> OpAmp<'d, T> {
                 self.calibrate_differential_pair(OpAmpDifferentialPair::P);
             }
         }
-
-        defmt::info!(
-            "calibration. n: {}, p: {}",
-            T::regs().csr().read().trimoffsetn(),
-            T::regs().csr().read().trimoffsetp()
-        );
 
         T::regs().csr().modify(|w| {
             w.set_calon(false);
@@ -598,6 +631,19 @@ macro_rules! impl_opamp_internal_output {
 
                 impl<'d> crate::adc::AdcChannel<crate::peripherals::$adc>
                     for OpAmpInternalOutput<'d, crate::peripherals::$inst>
+                {
+                }
+
+                impl<'d> crate::adc::SealedAdcChannel<crate::peripherals::$adc>
+                    for OpAmpStandaloneOutput<'d, crate::peripherals::$inst>
+                {
+                    fn channel(&self) -> u8 {
+                        $ch
+                    }
+                }
+
+                impl<'d> crate::adc::AdcChannel<crate::peripherals::$adc>
+                    for OpAmpStandaloneOutput<'d, crate::peripherals::$inst>
                 {
                 }
             };
