@@ -604,6 +604,7 @@ foreach_peripheral!(
     (opamp, OPAMP4) => {
         impl_opamp_external_output!(OPAMP4, ADC1, 11);
         impl_opamp_external_output!(OPAMP4, ADC4, 3);
+        impl_opamp_external_output!(OPAMP4, ADC5, 5);
     };
     // OPAMP5 only in STM32G4 Cat 3 devices
     (opamp, OPAMP5) => {
