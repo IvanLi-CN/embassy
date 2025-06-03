@@ -1299,6 +1299,10 @@ fn main() {
         (("tsc", "G8_IO4"), quote!(crate::tsc::G8IO4Pin)),
         (("dac", "OUT1"), quote!(crate::dac::DacPin<Ch1>)),
         (("dac", "OUT2"), quote!(crate::dac::DacPin<Ch2>)),
+        (("comp", "COMP1"), quote!(crate::comp::CompPin<Comp1>)),
+        (("comp", "COMP2"), quote!(crate::comp::CompPin<Comp2>)),
+        (("comp", "COMP3"), quote!(crate::comp::CompPin<Comp3>)),
+        (("comp", "COMP4"), quote!(crate::comp::CompPin<Comp4>)),
     ].into();
 
     for p in METADATA.peripherals {
@@ -1442,6 +1446,56 @@ fn main() {
                     g.extend(quote! {
                     impl_spdifrx_pin!( #peri, #pin_name, #af, #sel);
                     })
+                }
+
+                if regs.kind == "comp" {
+                    if pin.signal.starts_with("INP") {
+                        let peri = format_ident!("{}", p.name);
+                        let pin_name = format_ident!("{}", pin.pin);
+                        let sel_opt: Option<u8> = if pin.signal.ends_with("INP0") {
+                            Some(0) // INP0 maps to INPSEL = 0
+                        } else if pin.signal.ends_with("INP1") {
+                            Some(1) // INP1 maps to INPSEL = 1
+                        } else if pin.signal == "INP" { // Exact "INP" without suffix
+                            None // Ignore ambiguous "INP"
+                        } else {
+                            eprintln!("cargo:warning=COMP: Unhandled INP signal format '{}' for pin {}. Skipping.", pin.signal, pin.pin);
+                            None
+                        };
+
+                        if let Some(sel) = sel_opt {
+                            g.extend(quote! {
+                                impl_comp_vinp_pin!( #peri, #pin_name, #sel);
+                            });
+                        }
+                    } else if pin.signal.starts_with("INM") {
+                        let peri = format_ident!("{}", p.name);
+                        let pin_name = format_ident!("{}", pin.pin);
+                        let sel_opt: Option<u8> = if pin.signal.ends_with("INM0") {
+                            Some(0) // INM0 maps to INMSEL for IO1
+                        } else if pin.signal.ends_with("INM1") {
+                            Some(1) // INM1 maps to INMSEL for IO2
+                        } else if pin.signal == "INM" { // Exact "INM" without suffix
+                            None // Ignore ambiguous "INM"
+                        } else {
+                            eprintln!("cargo:warning=COMP: Unhandled INM signal format '{}' for pin {}. Skipping.", pin.signal, pin.pin);
+                            None
+                        };
+
+                        if let Some(sel_val) = sel_opt {
+                            g.extend(quote! {
+                                impl_comp_vinn_pin!( #peri, #pin_name, #sel_val);
+                            });
+                        }
+                    } else if pin.signal == "OUT" {
+                        // Impl OutputPin for the VOUT pin
+                        let peri = format_ident!("{}", p.name);
+                        let pin_name = format_ident!("{}", pin.pin);
+                        let af = pin.af.unwrap_or(0);
+                        g.extend(quote! {
+                            impl_comp_vout_pin!( #peri, #pin_name, #af);
+                        })
+                    }
                 }
             }
         }

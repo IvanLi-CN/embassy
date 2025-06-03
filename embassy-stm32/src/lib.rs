@@ -53,6 +53,8 @@ pub mod timer;
 
 #[cfg(adc)]
 pub mod adc;
+#[cfg(comp)]
+pub mod comp;
 #[cfg(can)]
 pub mod can;
 // FIXME: Cordic driver cause stm32u5a5zj crash
